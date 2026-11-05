@@ -1,0 +1,20 @@
+[sandbox]
+id = "null-universe-primary"
+image = "opensandbox/null-universe:v0.1.0"
+runtime = "firecracker" # High-density microVM with snapshot/restore support
+timeout = "24h"
+
+[resources]
+cpus = 4
+memory_mb = 4096
+disk_mb = 10240
+
+[network]
+egress = "restricted" # Restrict egress, route agent model traffic through gateway
+
+[mounts]
+ipc_socket = "/var/run/null-universe"
+
+[snapshot]
+enabled = true
+interval_seconds = 300 # Periodic state snapshots for timeline branching
