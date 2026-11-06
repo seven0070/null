@@ -1,0 +1,37 @@
+# Pumpkin Minecraft Server Configuration for the Null Universe
+# Self-contained, single-binary Rust host
+
+[basic]
+motd = "§8[§fNull Universe§8] §7Primordial Void Simulation §8(T=0)"
+max_players = 50
+view_distance = 12
+simulation_distance = 10
+default_gamemode = "creative"
+hardcore = false
+difficulty = "peaceful"
+pvp = false
+spawn_protection = 0
+
+[network]
+address = "0.0.0.0:25565"
+compression_threshold = 256
+use_epoll = true
+
+[rcon]
+enabled = true
+address = "127.0.0.1:25575"
+password = "null_universe_operator_key"
+
+[world]
+# Void world settings: pure air coordinates
+seed = 0
+dimension = "overworld"
+generator = "superflat"
+flat_generator_layers = "minecraft:air"
+
+[bedrock]
+enabled = true
+address = "0.0.0.0:19132"
+
+[logging]
+level = "info"

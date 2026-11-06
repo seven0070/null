@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Null Universe</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; height: 100%; background: #050508; color: #e8e8f0;
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; }
+  #app { display: flex; flex-direction: column; height: 100vh; }
+  header { padding: 10px 16px; border-bottom: 1px solid #22222e; display: flex; gap: 18px;
+    flex-wrap: wrap; align-items: baseline; }
+  header h1 { font-size: 15px; margin: 0; letter-spacing: 2px; color: #c9b8ff; }
+  header .stat { font-size: 12px; color: #9a9ab0; white-space: nowrap; }
+  header .stat b { color: #e8e8f0; font-weight: 600; }
+  #status-pill { color: #050508; background: #8f7bff; border-radius: 999px; padding: 1px 8px; }
+  #main { flex: 1; display: flex; min-height: 0; }
+  #view { flex: 1; position: relative; min-width: 0; }
+  #canvas { display: block; width: 100%; height: 100%; }
+  #hint { position: absolute; left: 12px; top: 10px; font-size: 11px; color: #6d6d84; pointer-events: none; }
+  aside { width: 300px; border-left: 1px solid #22222e; display: flex; flex-direction: column; min-height: 0; }
+  aside h2 { font-size: 11px; letter-spacing: 2px; color: #8a8aa5; margin: 0; padding: 10px 12px 6px; }
+  #chronicle { flex: 1; overflow-y: auto; padding: 0 12px 10px; font-size: 12px; line-height: 1.5; }
+  #chronicle div { margin-bottom: 6px; color: #b9b9cc; }
+  #chronicle .tick { color: #6d6d84; }
+  #chat { border-top: 1px solid #22222e; display: flex; flex-direction: column; max-height: 46vh; }
+  #log { flex: 1; overflow-y: auto; padding: 10px 12px; font-size: 13px; line-height: 1.55; }
+  #log .msg { margin-bottom: 8px; }
+  #log .who { font-weight: 700; }
+  #log .atlas .who { color: #c9b8ff; }
+  #log .you .who { color: #7dd3a8; }
+  #log .sys { color: #6d6d84; font-size: 12px; }
+  #bar { display: flex; gap: 8px; padding: 10px 12px; border-top: 1px solid #22222e; }
+  #input { flex: 1; background: #10101a; border: 1px solid #33334a; color: #e8e8f0;
+    border-radius: 6px; padding: 9px 10px; font: inherit; font-size: 13px; outline: none; }
+  #input:focus { border-color: #8f7bff; }
+  button { background: #8f7bff; color: #050508; border: 0; border-radius: 6px;
+    padding: 0 14px; font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; }
+  #quick { display: flex; gap: 6px; flex-wrap: wrap; padding: 0 12px 10px; }
+  #quick button { background: #1c1c2c; color: #b9b9cc; font-weight: 400; padding: 5px 9px; font-size: 12px; }
+  #quick button:hover { background: #2a2a40; color: #e8e8f0; }
+  @media (max-width: 760px) { aside { display: none; } }
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <h1>NULL UNIVERSE</h1>
+    <span class="stat">status <b id="status-pill">PrimordialVoid</b></span>
+    <span class="stat">tick <b id="tick">0</b></span>
+    <span class="stat">entropy <b id="entropy">0</b></span>
+    <span class="stat">mass <b id="mass">0</b></span>
+    <span class="stat">energy <b id="energy">0</b></span>
+    <span class="stat">manifested <b id="manifested">0</b></span>
+    <span class="stat">null entities <b id="nulls">0</b></span>
+  </header>
+  <div id="main">
+    <div id="view">
+      <canvas id="canvas"></canvas>
+      <div id="hint">top-down view of the void &middot; x right, z down &middot; gold diamond = void anchor &middot; white pulse = Atlas</div>
+    </div>
+    <aside>
+      <h2>CHRONICLE</h2>
+      <div id="chronicle"></div>
+    </aside>
+  </div>
+  <div id="chat">
+    <div id="log"></div>
+    <div id="quick">
+      <button data-cmd="atlas help">help</button>
+      <button data-cmd="atlas status">status</button>
+      <button data-cmd="atlas anchor">anchor</button>
+      <button data-cmd="atlas manifest monolith">monolith</button>
+      <button data-cmd="atlas manifest graph 5">graph K5</button>
+      <button data-cmd="atlas manifest field">field</button>
+      <button data-cmd="atlas nullify">nullify</button>
+      <button data-cmd="atlas pause">pause</button>
+    </div>
+    <div id="bar">
+      <input id="input" type="text" placeholder="Talk to Atlas — try: atlas manifest monolith" autocomplete="off">
+      <button id="send">Send</button>
+    </div>
+  </div>
+</div>
+<script>
+(function () {
+  var canvas = document.getElementById('canvas');
+  var ctx = canvas.getContext('2d');
+  var logEl = document.getElementById('log');
+  var input = document.getElementById('input');
+  var state = null;
+  var seenChronicle = 0;
+
+  function esc(s) { return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+
+  function addMsg(cls, who, text) {
+    var div = document.createElement('div');
+    div.className = 'msg ' + cls;
+    div.innerHTML = '<span class="who">' + esc(who) + '</span> ' + esc(text).replace(/\n/g, '<br>');
+    logEl.appendChild(div);
+    logEl.scrollTop = logEl.scrollHeight;
+  }
+
+  function draw() {
+    var view = document.getElementById('view');
+    var w = view.clientWidth, h = view.clientHeight;
+    if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; }
+    ctx.fillStyle = '#050508';
+    ctx.fillRect(0, 0, w, h);
+    var scale = Math.min(w, h) / 56;           // world units -> px, ~28 units each way
+    var cx = w / 2, cy = h / 2;
+    var px = function (x) { return cx + x * scale; };
+    var pz = function (z) { return cy + z * scale; };
+
+    // faint grid
+    ctx.strokeStyle = '#14141f'; ctx.lineWidth = 1;
+    for (var g = -28; g <= 28; g += 4) {
+      ctx.beginPath(); ctx.moveTo(px(g), pz(-28)); ctx.lineTo(px(g), pz(28)); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(px(-28), pz(g)); ctx.lineTo(px(28), pz(g)); ctx.stroke();
+    }
+    // origin cross
+    ctx.strokeStyle = '#26263a';
+    ctx.beginPath(); ctx.moveTo(px(0), pz(-28)); ctx.lineTo(px(0), pz(28)); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(px(-28), pz(0)); ctx.lineTo(px(28), pz(0)); ctx.stroke();
+
+    if (!state) return;
+    var ents = state.physical_entities || {};
+    var byId = {};
+    Object.keys(ents).forEach(function (id) { byId[id] = ents[id]; });
+
+    // graph edges first (under nodes)
+    ctx.strokeStyle = 'rgba(125, 211, 252, 0.55)'; ctx.lineWidth = 1;
+    (state.edges || []).forEach(function (e) {
+      var a = byId[e.a], b = byId[e.b];
+      if (!a || !b) return;
+      ctx.beginPath(); ctx.moveTo(px(a.position.x), pz(a.position.z));
+      ctx.lineTo(px(b.position.x), pz(b.position.z)); ctx.stroke();
+    });
+
+    Object.keys(ents).forEach(function (id) {
+      var e = ents[id], x = px(e.position.x), z = pz(e.position.z);
+      if (e.entity_type === 'anchor') {
+        ctx.fillStyle = '#ffd166';
+        ctx.beginPath();
+        ctx.moveTo(x, z - 9); ctx.lineTo(x + 8, z); ctx.lineTo(x, z + 9); ctx.lineTo(x - 8, z);
+        ctx.closePath(); ctx.fill();
+        ctx.fillStyle = '#ffd166'; ctx.font = '11px monospace';
+        ctx.fillText('anchor', x + 11, z + 4);
+      } else if (e.entity_type === 'manifested_construct') {
+        var hw = Math.max(6, (e.metadata.width || 3) * scale / 2);
+        var hd = Math.max(6, (e.metadata.depth || 3) * scale / 2);
+        ctx.fillStyle = '#5b5b7a';
+        ctx.fillRect(x - hw, z - hd, hw * 2, hd * 2);
+        ctx.strokeStyle = '#8a8ab0'; ctx.strokeRect(x - hw, z - hd, hw * 2, hd * 2);
+        ctx.fillStyle = '#c9c9e0'; ctx.font = '11px monospace';
+        ctx.fillText(e.id, x - hw, z - hd - 5);
+      } else if (e.entity_type === 'math_node') {
+        ctx.fillStyle = '#7dd3fc';
+        ctx.beginPath(); ctx.arc(x, z, 5, 0, Math.PI * 2); ctx.fill();
+      } else if (e.entity_type === 'field_emitter') {
+        ctx.strokeStyle = 'rgba(167, 139, 250, 0.7)';
+        ctx.setLineDash([4, 4]);
+        ctx.beginPath(); ctx.arc(x, z, (e.radius || 15) * scale, 0, Math.PI * 2); ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.fillStyle = '#a78bfa'; ctx.font = '11px monospace';
+        ctx.fillText(e.id, x + 6, z - 6);
+      }
+    });
+
+    // null entities: pulsing white dots
+    var t = Date.now() / 500;
+    Object.keys(state.null_entities || {}).forEach(function (id) {
+      var ne = state.null_entities[id];
+      var x = px(ne.position.x), z = pz(ne.position.z);
+      var r = 5 + Math.sin(t) * 1.5;
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath(); ctx.arc(x, z, r, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#ffffff'; ctx.font = 'bold 11px monospace';
+      ctx.fillText(id, x + 10, z + 4);
+    });
+  }
+
+  function render(s) {
+    state = s;
+    var r = s.report || {};
+    document.getElementById('status-pill').textContent = r.status || s.status;
+    document.getElementById('tick').textContent = r.tick;
+    document.getElementById('entropy').textContent = r.entropy;
+    document.getElementById('mass').textContent = r.total_mass;
+    document.getElementById('energy').textContent = r.total_energy;
+    document.getElementById('manifested').textContent = r.physical_entities;
+    document.getElementById('nulls').textContent = r.null_entities;
+    var ch = document.getElementById('chronicle');
+    var items = (s.chronicle || []).slice(-60);
+    if (items.length !== seenChronicle) {
+      seenChronicle = items.length;
+      ch.innerHTML = '';
+      items.forEach(function (c) {
+        var div = document.createElement('div');
+        div.innerHTML = '<span class="tick">[' + c.tick + ']</span> ' + esc(c.text);
+        ch.appendChild(div);
+      });
+      ch.scrollTop = ch.scrollHeight;
+    }
+    draw();
+  }
+
+  function poll() {
+    fetch('/api/state').then(function (res) { return res.json(); })
+      .then(render).catch(function () {});
+  }
+
+  function send(text) {
+    if (!text) return;
+    addMsg('you', 'You', text);
+    fetch('/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ speaker: 'Sanath', message: text })
+    }).then(function (res) { return res.json(); })
+      .then(function (data) {
+        (data.replies || []).forEach(function (r) { addMsg('atlas', 'Atlas', r); });
+        if (data.state) render(data.state);
+      }).catch(function () { addMsg('sys', '', 'Could not reach the universe. Is the server running?'); });
+  }
+
+  document.getElementById('send').addEventListener('click', function () {
+    var v = input.value.trim(); input.value = ''; send(v); input.focus();
+  });
+  input.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') { var v = input.value.trim(); input.value = ''; send(v); }
+  });
+  document.querySelectorAll('#quick button').forEach(function (b) {
+    b.addEventListener('click', function () { send(b.getAttribute('data-cmd')); input.focus(); });
+  });
+  window.addEventListener('resize', draw);
+
+  poll();
+  setInterval(poll, 2000);
+  setInterval(draw, 500); // keep the Atlas pulse alive
+  fetch('/api/state').then(function (res) { return res.json(); }).then(function (s) {
+    if (s.report && s.report.tick === 0 && (s.chronicle || []).length <= 2) {
+      addMsg('atlas', 'Atlas', "I'm Atlas, in the Null Universe. Type in the bar below and talk to me like you talk to Atlas — try 'atlas help'.");
+    }
+  });
+})();
+</script>
+</body>
+</html>
